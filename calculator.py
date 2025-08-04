@@ -1,179 +1,116 @@
 import numpy as np
-import constants as const
+from constants import *
 
-def calculate_B(T, x, N):
+def calculate_z_factor():
     """
-    计算第二维利系数 B (对应 AGA8-92DC 方程 (3))
-
-    Args:
-        T (float): 温度 (K)
-        x (np.array): 各组分的摩尔分数数组
-        N (int): 组分数量
-
-    Returns:
-        float: 第二维利系数 B
+    根据 AGA8-92DC 模型计算天然气压缩因子Z。
+    此函数将MATLAB脚本的逻辑翻译为Python。
     """
-    B = 0.0
+    print("开始计算...")
+
+    # Part 1: 计算第二维利系数 B
+    # 使用向量化操作替代双重 for 循环
+    B_calc = 0.0
+    E_outer = np.sqrt(np.outer(E, E))
+    G_outer = np.add.outer(G, G) / 2
+    Q_outer = np.outer(Q, Q)
+    F_outer_sqrt = np.sqrt(np.outer(F, F))
+    S_outer = np.outer(S, S)
+    W_outer = np.outer(W, W)
+    K_outer_pow1_5 = np.outer(K, K)**1.5
+    x_outer = np.outer(x, x)
+
+    for n in range(18):
+        ZJCS = T**(-u[n])
+        Eij = Ex * E_outer
+        Gij = Gx * G_outer
+        
+        Bij = ((Gij + 1 - g[n])**g[n]) * \
+              ((Q_outer + 1 - q[n])**q[n]) * \
+              ((F_outer_sqrt + 1 - f[n])**f[n]) * \
+              ((S_outer + 1 - s[n])**s[n]) * \
+              ((W_outer + 1 - w[n])**w[n])
+        
+        sum_val = np.sum(x_outer * Bij * (Eij**u[n]) * K_outer_pow1_5)
+        B_calc += a[n] * ZJCS * sum_val
     
-    # 预先计算 Eij 和 Gij 矩阵，避免在主循环中重复计算
-    Eij = const.Ex * np.sqrt(np.outer(const.E, const.E))
-    Gij = const.Gx * (np.add.outer(const.G, const.G) / 2)
-    
-    # K(i)*K(j) 的外积
-    K_prod = np.outer(const.K, const.K)
+    # 在常量文件中 B=0, 这里我们使用计算出的值
+    # 如果需要保留文件中的B，注释掉下面这行
+    # B = B_calc
 
-    for n in range(18): # n 从 0 到 17，对应 MATLAB 的 1 到 18
-        ZJCS = T ** (-const.u[n])
-        
-        # 使用 NumPy 的向量化操作代替内层循环
-        Bij = (
-            (Gij + 1 - const.g[n]) ** const.g[n] *
-            (np.outer(const.Q, const.Q) + 1 - const.q[n]) ** const.q[n] *
-            (np.sqrt(np.outer(const.F, const.F)) + 1 - const.f[n]) ** const.f[n] *
-            (np.outer(const.S, const.S) + 1 - const.s[n]) ** const.s[n] *
-            (np.outer(const.W, const.W) + 1 - const.w[n]) ** const.w[n]
-        )
-        
-        term_matrix = Bij * (Eij ** const.u[n]) * (K_prod ** 1.5)
-        
-        # x(i)*x(j) 的外积
-        x_prod = np.outer(x, x)
-        
-        # 计算总和
-        sum_val = np.sum(x_prod * term_matrix)
-        
-        B += const.a[n] * ZJCS * sum_val
-        
-    return B
+    print(f"计算出的第二维利系数 B = {B_calc}")
 
+    # Part 2: 计算 Cn 所需的中间变量
+    F0 = np.sum(x**2 * F)
+    Q0 = np.sum(x * Q)
+    sum1_G = np.sum(x * G)
+    sum2_E = np.sum(x * E**2.5)
 
-def calculate_intermediate_params(x, N):
-    """
-    计算混合物参数 F0, Q0, G0, U0 (对应 AGA8-92DC 方程 (5) 到 (8))
+    # 使用上三角矩阵求和来替代双重 for 循环
+    G0_term = np.triu(x_outer * (Gx - 1) * np.add.outer(G, G), k=1)
+    G0 = sum1_G + np.sum(G0_term)
 
-    Args:
-        x (np.array): 各组分的摩尔分数数组
-        N (int): 组分数量
+    U0_term = np.triu(x_outer * (Ux**5 - 1) * (np.outer(E, E)**2.5), k=1)
+    U0 = (sum2_E**2 + np.sum(U0_term))**0.2
 
-    Returns:
-        tuple: 包含 F0, Q0, G0, U0 的元组
-    """
-    F0 = np.sum(x**2 * const.F)
-    Q0 = np.sum(x * const.Q)
-    
-    # G0 的计算
-    sum1_G0 = np.sum(x * const.G)
-    sum2_G0 = 0.0
-    # 使用 np.triu_indices 来获取上三角矩阵的索引，避免重复计算和 i=j 的情况
-    for i, j in zip(*np.triu_indices(N, k=1)):
-        sum2_G0 += x[i] * x[j] * (const.Gx[i, j] - 1) * (const.G[i] + const.G[j])
-    G0 = sum1_G0 + sum2_G0
+    print("中间变量计算完成: F0, Q0, G0, U0")
 
-    # U0 的计算
-    sum1_U0 = np.sum(x * const.E**2.5)**2
-    sum2_U0 = 0.0
-    for i, j in zip(*np.triu_indices(N, k=1)):
-        sum2_U0 += x[i] * x[j] * (const.Ux[i, j]**5 - 1) * ((const.E[i] * const.E[j])**2.5)
-    U0 = (sum1_U0 + sum2_U0)**0.2 # 对应 (sum^2 + U0)^0.2
+    # Part 3: 计算 K0
+    sum1_K = np.sum(x * K**2.5)
+    sum2_K_term = np.triu(x_outer * (Kx**5 - 1) * (np.outer(K, K)**2.5), k=1)
+    K0 = (sum1_K**2 + 2 * np.sum(sum2_K_term))**0.2
+    print(f"K0 计算完成: K0 = {K0}")
 
-    return F0, Q0, G0, U0
+    # Part 4 & 5: 迭代计算压力 P
+    pm = 0.01  # 摩尔密度初始猜测值
+    P = 0.0    # 压力初始值
 
-
-def calculate_K0(x, N):
-    """
-    计算混合摩尔体积参数 K0 (对应 AGA8-92DC 方程 (4))
-
-    Args:
-        x (np.array): 各组分的摩尔分数数组
-        N (int): 组分数量
-
-    Returns:
-        float: 混合摩尔体积参数 K0
-    """
-    sum1 = np.sum(x * const.K**2.5)**2
-    
-    sum2 = 0.0
-    for i, j in zip(*np.triu_indices(N, k=1)):
-        sum2 += x[i] * x[j] * (const.Kx[i, j]**5 - 1) * ((const.K[i] * const.K[j])**2.5)
-        
-    K0 = (sum1 + 2 * sum2)**0.2
-    return K0
-
-
-def calculate_properties(T, P0, x, N, tolerance=1e-5, max_iterations=1000):
-    """
-    通过迭代计算压力，求解压缩因子 Z 和其他气体性质
-
-    Args:
-        T (float): 温度 (K)
-        P0 (float): 初始压力 (MPa)
-        x (np.array): 各组分的摩尔分数数组
-        N (int): 组分数量
-        tolerance (float): 压力收敛容差
-        max_iterations (int): 最大迭代次数
-
-    Returns:
-        dict: 包含 Z, P, pm, pr, p 的结果字典，如果未收敛则返回 None
-    """
-    # 1. 调用辅助函数计算不变量
-    B = calculate_B(T, x, N)
-    F0, Q0, G0, U0 = calculate_intermediate_params(x, N)
-    K0 = calculate_K0(x, N)
-
-    # 2. 计算 Cn (n=13-18) 的和 SUM1
+    # 计算 SUM1 (n=13 to 18)
     SUM1 = 0
-    # n 从 12 到 17 (对应 MATLAB 13 到 18)
+    # MATLAB n=13:18 对应 Python range(12, 18)
     for n in range(12, 18):
-        Cn = const.a[n] * \
-             ((G0 + 1 - const.g[n])**const.g[n]) * \
-             (((Q0**2) + 1 - const.q[n])**const.q[n]) * \
-             ((F0 + 1 - const.f[n])**const.f[n]) * \
-             (U0**const.u[n]) * \
-             (T**(-const.u[n]))
+        Cn = a[n] * ((G0 + 1 - g[n])**g[n]) * \
+             (((Q0**2) + 1 - q[n])**q[n]) * \
+             ((F0 + 1 - f[n])**f[n]) * \
+             (U0**u[n]) * (T**(-u[n]))
         SUM1 += Cn
-
-    # 3. 迭代求解 pm 和 P
-    pm = 0.01  # 初始摩尔密度
-    P = 0
     
-    for _ in range(max_iterations):
-        pr = (K0**3) * pm  # 对比密度
+    print("开始压力迭代计算...")
+    iteration_count = 0
+    max_iterations = 1000000 # 防止死循环
 
-        # 计算 SUM2
-        SUM2 = 0
-        # n 从 12 到 57 (对应 MATLAB 13 到 58)
-        for n in range(12, 58):
-            Cn = const.a[n] * \
-                 ((G0 + 1 - const.g[n])**const.g[n]) * \
-                 (((Q0**2) + 1 - const.q[n])**const.q[n]) * \
-                 ((F0 + 1 - const.f[n])**const.f[n]) * \
-                 (U0**const.u[n]) * \
-                 (T**(-const.u[n]))
-            
-            term = (const.b[n] - const.c[n] * const.k[n] * (pr**const.k[n])) * \
-                   (pr**const.b[n]) * np.exp(-const.c[n] * (pr**const.k[n]))
-            SUM2 += Cn * term
-
-        # 计算压力 P
-        P = pm * const.R * T * (1 + B * pm - pr * SUM1 + SUM2)
-
-        if abs(P - P0) <= tolerance:
-            # 4. 计算最终结果
-            Z = P0 / (pm * const.R * T)
-            M0 = np.sum(x * const.M)
-            rho = M0 * pm  # 质量密度
-
-            return {
-                "Z": Z,
-                "P_calculated": P,
-                "pm": pm,
-                "pr": pr,
-                "rho": rho
-            }
-        
-        # 更新 pm 以进行下一次迭代 (这里使用一个简单的增量，实际应用中可能有更复杂的求解器)
-        # MATLAB 代码中是 pm = pm + 0.000001，这是一个非常简单的线性搜索
+    while abs(P - P0) >= 0.00001 and iteration_count < max_iterations:
         pm += 0.000001
+        pr = (K0**3) * pm
+        
+        SUM2 = 0
+        # MATLAB n=13:58 对应 Python range(12, 58)
+        for n in range(12, 58):
+            Cn = a[n] * ((G0 + 1 - g[n])**g[n]) * \
+                 (((Q0**2) + 1 - q[n])**q[n]) * \
+                 ((F0 + 1 - f[n])**f[n]) * \
+                 (U0**u[n]) * (T**(-u[n]))
+            
+            term = (b[n] - c[n] * k[n] * (pr**k[n])) * (pr**b[n]) * np.exp(-c[n] * (pr**k[n]))
+            SUM2 += Cn * term
+            
+        P = pm * R * T * (1 + B_calc * pm - pr * SUM1 + SUM2)
+        iteration_count += 1
 
-    print("Warning: Calculation did not converge within max iterations.")
-    return None
+    if iteration_count == max_iterations:
+        print("警告: 已达到最大迭代次数，结果可能不准确。")
+    else:
+        print(f"迭代完成，共 {iteration_count} 次。")
+
+    # Part 6: 计算最终结果
+    Z = P0 / (pm * R * T)
+    M0 = np.sum(x * M)
+    p_density = M0 * pm
+
+    # 输出结果
+    print("\n--- 计算结果 ---")
+    print(f"Z={Z:.6f},pm={pm:.3f},pr={pr:.3f},p={p_density:.3f}")
+    return Z, pm, pr, p_density
+
+if __name__ == '__main__':
+    calculate_z_factor()
