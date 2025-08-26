@@ -76,8 +76,7 @@ def calculate_z_factor_linear_scan(T, P0, x, step=0.000001, max_iterations=10000
         iteration_count += 1
         
         if log_callback and iteration_count % 5000 == 0:
-            log_message = f"  迭代 {iteration_count} 次, pm={pm:.6f}, P={P:.6f}, 差值={abs(P - P0):.10f}\n"
-            log_callback(log_message)
+            log_callback(f"  迭代 {iteration_count} 次, pm={pm:.6f}, P={P:.6f}, 差值={abs(P - P0):.10f}\n")
 
     if iteration_count == max_iterations and log_callback:
         log_callback("警告: 已达到最大迭代次数，结果可能不准确。\n")
