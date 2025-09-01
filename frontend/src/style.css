@@ -1,0 +1,21 @@
+:root {
+  /* Default Light Theme */
+  --bg-color: #f8f9fa;
+  --card-bg-color: #ffffff;
+  --text-color: #212529;
+  --primary-color: #007bff;
+  --primary-hover-color: #0056b3;
+  --success-color: #28a745;
+  --danger-color: #dc3545;
+  --border-color: #dee2e6;
+  --shadow-color: rgba(0, 0, 0, 0.08);
+  --font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
+}
+
+
+body {
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  font-family: var(--font-family);
+  margin: 0;
+}
