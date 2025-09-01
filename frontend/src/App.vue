@@ -162,7 +162,7 @@ async function calculate() {
 
 <template>
   <div class="container">
-    <h1>压缩因子计算器</h1>
+    <h1>AGA8-92DC压缩因子计算器</h1>
 
     <div class="main-layout">
       <!-- Input Column -->
