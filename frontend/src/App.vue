@@ -48,6 +48,7 @@ const component_map = computed(() => {
 // --- 工况参数 ---
 const T_work = ref(350.0);
 const P_work_kPa = ref(10000.0);
+const Q_work = ref(1000.0);
 
 // --- 标况参数 ---
 const T_base = ref(293.15);
@@ -58,6 +59,7 @@ const base_components = ref(JSON.parse(JSON.stringify(defaultValues)));
 // --- 结果 ---
 const result_work = ref(null);
 const result_base = ref(null);
+const Q_base = ref(null);
 const error = ref(null);
 const loading = ref(false);
 
@@ -86,6 +88,7 @@ async function calculate() {
   loading.value = true;
   result_work.value = null;
   result_base.value = null;
+  Q_base.value = null;
   error.value = null;
 
   if (!is_fraction_valid.value) {
@@ -149,8 +152,18 @@ async function calculate() {
       throw new Error(`标况计算错误: ${errorData.detail || `HTTP error! status: ${response_base.status}`}`);
     }
 
-    result_work.value = await response_work.json();
-    result_base.value = await response_base.json();
+    const data_work = await response_work.json();
+    const data_base = await response_base.json();
+
+    result_work.value = data_work;
+    result_base.value = data_base;
+
+    // Calculate standard flow
+    const z_work = data_work.compression_factor;
+    const z_base = data_base.compression_factor;
+    if (z_work && z_base && P_base_kPa.value > 0 && T_work.value > 0) {
+        Q_base.value = Q_work.value * (P_work_kPa.value / P_base_kPa.value) * (T_base.value / T_work.value) * (z_base / z_work);
+    }
 
   } catch (e) {
     error.value = e.message;
@@ -181,7 +194,11 @@ async function calculate() {
                <label for="pressure_work">工况压力 (kPa)</label>
                <input id="pressure_work" type="number" v-model.number="P_work_kPa" />
              </div>
-         </fieldset>
+             <div class="input-group">
+               <label for="flow_work">工况流量 (m³/h)</label>
+               <input id="flow_work" type="number" v-model.number="Q_work" />
+             </div>
+          </fieldset>
          <fieldset class="conditions-group">
              <legend>标况参数</legend>
              <div class="input-group">
@@ -243,6 +260,7 @@ async function calculate() {
            <div class="result-grid">
                <p class="result-item"><strong>工况 Z 因子:</strong> <span>{{ result_work.compression_factor?.toFixed(6) }}</span></p>
                <p class="result-item"><strong>标况 Z 因子:</strong> <span>{{ result_base.compression_factor?.toFixed(6) }}</span></p>
+               <p class="result-item result-item-full"><strong>标况流量 (Nm³/h):</strong> <span>{{ Q_base?.toFixed(4) }}</span></p>
            </div>
            
            <h3>最终组分比例:</h3>
@@ -415,6 +433,13 @@ async function calculate() {
         font-size: 1.3rem;
         font-weight: 600;
         color: var(--success-color);
+    }
+    
+    .result-item-full {
+        grid-column: 1 / -1;
+    }
+    .result-item-full span {
+      color: var(--primary-color)
     }
     
     .result-list {
